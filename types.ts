@@ -1,4 +1,4 @@
 export enum Tab {
   Analyze = 'Analyze',
-  Generate = 'Generate',
+  Generate = 'Generate & Edit',
 }
