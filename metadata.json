@@ -1,0 +1,5 @@
+{
+  "name": "AI Image Stylizer",
+  "description": "An AI-powered tool to analyze images for creative prompts and generate new artistic images based on facial structures and user styles.",
+  "requestFramePermissions": []
+}
