@@ -1,16 +1,26 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { fileToBase64 } from '../services/geminiService';
 
 interface ImageUploaderProps {
   onImageUpload: (fileData: { base64: string; mimeType: string }) => void;
   title: string;
   description: string;
+  initialImage?: { base64: string; mimeType: string } | null;
 }
 
-const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, title, description }) => {
+const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, title, description, initialImage }) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialImage) {
+      const dataUrl = `data:${initialImage.mimeType};base64,${initialImage.base64}`;
+      setImagePreview(dataUrl);
+    } else {
+      setImagePreview(null);
+    }
+  }, [initialImage]);
 
   const handleFileSelected = async (file: File | null) => {
     if (file && file.type.startsWith('image/')) {
@@ -19,8 +29,8 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, title, des
         const dataUrl = `data:${mimeType};base64,${base64}`;
         setImagePreview(dataUrl);
         onImageUpload({ base64, mimeType });
-      } catch (error) {
-        console.error("Error processing file:", error);
+      } catch (error: any) {
+        console.error("Error processing file:", error.message || error);
         // You could add user-facing error handling here
       }
     }

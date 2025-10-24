@@ -1,4 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, storage, db } from './services/firebase';
 import { Tab } from './types';
 import TabButton from './components/TabButton';
 import ImageUploader from './components/ImageUploader';
@@ -8,11 +12,23 @@ import GenerateIcon from './components/icons/GenerateIcon';
 import { analyzeImageForPrompt, generateImage } from './services/geminiService';
 import Tooltip from './components/Tooltip';
 import PasteIcon from './components/icons/PasteIcon';
+import Login from './components/Login';
+import Gallery from './components/Gallery';
+import GalleryIcon from './components/icons/GalleryIcon';
+import SaveIcon from './components/icons/SaveIcon';
+import UsePromptIcon from './components/icons/UsePromptIcon';
+import HistoryIcon from './components/icons/HistoryIcon';
+import History from './components/History';
 
 interface ImageFile {
   base64: string;
   mimeType: string;
 }
+
+type Notification = {
+  message: string;
+  type: 'success' | 'error';
+};
 
 const artisticStyles = [
   'Impressionism', 'Cubism', 'Surrealism', 'Pop Art', 
@@ -21,6 +37,8 @@ const artisticStyles = [
 ];
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loadingAuthState, setLoadingAuthState] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>(Tab.Analyze);
   
   // State for Analyze Tab
@@ -33,7 +51,6 @@ const App: React.FC = () => {
   const [styleIntensity, setStyleIntensity] = useState<number>(3);
   const [focusArea, setFocusArea] = useState<string>('');
 
-
   // State for Generate Tab
   const [generateImageFile, setGenerateImageFile] = useState<ImageFile | null>(null);
   const [userPrompt, setUserPrompt] = useState<string>('');
@@ -45,11 +62,32 @@ const App: React.FC = () => {
   const [styleStrength, setStyleStrength] = useState<number>(3);
   const [imageQuality, setImageQuality] = useState<string>('medium');
   
+  // State for Gallery & History
+  const [galleryKey, setGalleryKey] = useState(0);
+  const [historyKey, setHistoryKey] = useState(0);
+
   const [error, setError] = useState<string | null>(null);
-  const [notification, setNotification] = useState<string>('');
+  const [notification, setNotification] = useState<Notification | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoadingAuthState(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error: any) {
+      console.error("Sign out error:", error.message || error);
+      setError("Failed to sign out.");
+    }
+  };
 
   const handleAnalyze = async () => {
-    if (!analyzeImage) {
+    if (!analyzeImage || !user) {
       setError('Please upload an image to analyze.');
       return;
     }
@@ -67,9 +105,32 @@ const App: React.FC = () => {
         focusArea
       );
       setGeneratedPrompt(prompt);
-    } catch (e) {
+
+      // Save to history
+      try {
+        const storageRef = ref(storage, `analysisImages/${user.uid}/${Date.now()}`);
+        await uploadString(storageRef, analyzeImage.base64, 'base64', { contentType: analyzeImage.mimeType });
+        const imageUrl = await getDownloadURL(storageRef);
+        await addDoc(collection(db, 'analysisHistory'), {
+          userId: user.uid,
+          imageUrl,
+          prompt,
+          createdAt: serverTimestamp(),
+        });
+        setHistoryKey(prev => prev + 1);
+      } catch (historyError: any) {
+        console.error("Failed to save analysis to history:", historyError.message || historyError);
+        let message = "Analysis complete, but an error occurred while saving to your history.";
+        if (historyError.code === 'storage/retry-limit-exceeded' || historyError.code === 'unavailable') {
+            message = "Analysis complete, but failed to save to history due to a network issue.";
+        }
+        setNotification({ message, type: 'error' });
+        setTimeout(() => setNotification(null), 5000);
+      }
+
+    } catch (e: any) {
       setError('Failed to analyze image. Please try again.');
-      console.error(e);
+      console.error('Analysis Error:', e.message || e);
     } finally {
       setIsAnalyzing(false);
     }
@@ -95,9 +156,9 @@ const App: React.FC = () => {
       );
       setIsImageLoading(true);
       setGeneratedResultImage(`data:${newImageMimeType};base64,${newImageBase64}`);
-    } catch (e) {
+    } catch (e: any) {
       setError('Failed to generate image. Please try again.');
-      console.error(e);
+      console.error('Generation Error:', e.message || e);
     } finally {
       setIsGenerating(false);
     }
@@ -105,10 +166,10 @@ const App: React.FC = () => {
   
   const copyToClipboard = () => {
     navigator.clipboard.writeText(generatedPrompt).then(() => {
-      setNotification('Prompt copied to clipboard!');
-      setTimeout(() => setNotification(''), 3000);
-    }).catch(err => {
-      console.error('Could not copy text: ', err);
+      setNotification({ message: 'Prompt copied to clipboard!', type: 'success' });
+      setTimeout(() => setNotification(null), 3000);
+    }).catch((err: any) => {
+      console.error('Could not copy text: ', err.message || err);
       setError('Failed to copy prompt to clipboard.');
     });
   };
@@ -117,10 +178,10 @@ const App: React.FC = () => {
     try {
         const text = await navigator.clipboard.readText();
         setter(text);
-        setNotification('Pasted from clipboard!');
-        setTimeout(() => setNotification(''), 3000);
-    } catch (err) {
-        console.error('Failed to read clipboard contents: ', err);
+        setNotification({ message: 'Pasted from clipboard!', type: 'success' });
+        setTimeout(() => setNotification(null), 3000);
+    } catch (err: any) {
+        console.error('Failed to read clipboard contents: ', err.message || err);
         setError('Could not paste from clipboard. Please check browser permissions.');
     }
   };
@@ -130,10 +191,10 @@ const App: React.FC = () => {
           const text = await navigator.clipboard.readText();
           setGeneratedPrompt(text);
           setIsRefiningPrompt(true);
-          setNotification('Pasted from clipboard!');
-          setTimeout(() => setNotification(''), 3000);
-      } catch (err) {
-          console.error('Failed to read clipboard contents: ', err);
+          setNotification({ message: 'Pasted from clipboard!', type: 'success' });
+          setTimeout(() => setNotification(null), 3000);
+      } catch (err: any) {
+          console.error('Failed to read clipboard contents: ', err.message || err);
           setError('Could not paste from clipboard. Please check browser permissions.');
       }
   };
@@ -148,38 +209,118 @@ const App: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    setNotification('Image download started!');
-    setTimeout(() => setNotification(''), 3000);
+    setNotification({ message: 'Image download started!', type: 'success' });
+    setTimeout(() => setNotification(null), 3000);
+  };
+  
+  const handleSaveToGallery = async () => {
+    if (!generatedResultImage || !user) {
+        setError("You must be logged in and have a generated image to save.");
+        return;
+    }
+    setNotification({ message: "Saving to gallery...", type: 'success' });
+    try {
+        const base64Data = generatedResultImage.split(',')[1];
+        const mimeType = generatedResultImage.split(';')[0].split(':')[1];
+        const fileExtension = mimeType.split('/')[1] || 'png';
+        
+        const storageRef = ref(storage, `images/${user.uid}/${Date.now()}.${fileExtension}`);
+        await uploadString(storageRef, base64Data, 'base64', { contentType: mimeType });
+        
+        setNotification({ message: 'Image saved to gallery successfully!', type: 'success' });
+        setGalleryKey(prev => prev + 1); // Trigger gallery refresh
+        setActiveTab(Tab.Gallery); // Switch to gallery tab
+        setTimeout(() => setNotification(null), 3000);
+    } catch (e: any) {
+        console.error("Error saving to storage:", e.message || e);
+        if (e.code === 'storage/retry-limit-exceeded') {
+          setError("Could not save to gallery due to a network issue. Please check your connection and try again.");
+        } else {
+          setError("Failed to save image to gallery. Please try again.");
+        }
+        setNotification(null);
+    }
+  };
+
+  const handleUsePrompt = () => {
+    if (!generatedPrompt || !analyzeImage) {
+      setError("Cannot proceed without a generated prompt and an image from the analysis step.");
+      return;
+    }
+    setUserPrompt(generatedPrompt);
+    setGenerateImageFile(analyzeImage);
+    setActiveTab(Tab.Generate);
+    setNotification({ message: "Prompt and image loaded! Ready to generate.", type: 'success' });
+    setTimeout(() => setNotification(null), 4000);
   };
 
   const toggleRefinePrompt = () => {
     setIsRefiningPrompt(!isRefiningPrompt);
   };
 
+  if (loadingAuthState) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Spinner className="h-12 w-12 text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   return (
     <div className="min-h-screen bg-background text-text-primary p-4 sm:p-6 lg:p-8">
        {notification && (
-        <div className="fixed bottom-5 right-5 bg-green-600 text-white py-2 px-4 rounded-lg shadow-lg z-50" role="status">
-          {notification}
+        <div className={`fixed bottom-5 right-5 text-white py-2 px-4 rounded-lg shadow-lg z-50 ${
+          notification.type === 'success' ? 'bg-green-600' : 'bg-red-600'
+        }`} role="status">
+          {notification.message}
         </div>
       )}
       <div className="max-w-6xl mx-auto">
-        <header className="text-center mb-8">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
-            AI Image Stylizer
-          </h1>
-          <p className="mt-2 text-lg text-slate-600">
-            Analyze, edit, and transform your photos with the power of generative AI.
-          </p>
+        <header className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
+            <div className="text-center sm:text-left">
+              <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
+                AI Image Stylizer
+              </h1>
+              <p className="mt-2 text-lg text-slate-600">
+                Analyze, edit, and transform your photos with the power of generative AI.
+              </p>
+            </div>
+            <div className="flex items-center gap-4 bg-card-bg p-2 rounded-full shadow-sm">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="User" className="w-10 h-10 rounded-full" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold text-lg">
+                    {user.email ? user.email.charAt(0).toUpperCase() : '?'}
+                  </div>
+                )}
+                <span className="font-semibold text-text-primary hidden md:block max-w-[150px] truncate">
+                  {user.displayName || user.email}
+                </span>
+                <button 
+                    onClick={handleSignOut} 
+                    className="px-4 py-2 bg-slate-200 text-text-primary font-semibold rounded-full hover:bg-slate-300 transition"
+                >
+                    Sign Out
+                </button>
+            </div>
         </header>
 
-        <nav className="flex justify-center items-center gap-4 mb-8">
+        <nav className="flex justify-center items-center gap-2 sm:gap-4 mb-8 flex-wrap">
           <TabButton isActive={activeTab === Tab.Analyze} onClick={() => setActiveTab(Tab.Analyze)}>
             <AnalyzeIcon /> Analyze & Prompt
           </TabButton>
           <TabButton isActive={activeTab === Tab.Generate} onClick={() => setActiveTab(Tab.Generate)}>
             <GenerateIcon /> Generate & Edit
+          </TabButton>
+           <TabButton isActive={activeTab === Tab.Gallery} onClick={() => setActiveTab(Tab.Gallery)}>
+            <GalleryIcon /> My Gallery
+          </TabButton>
+          <TabButton isActive={activeTab === Tab.History} onClick={() => setActiveTab(Tab.History)}>
+            <HistoryIcon /> History
           </TabButton>
         </nav>
 
@@ -201,6 +342,7 @@ const App: React.FC = () => {
                       onImageUpload={setAnalyzeImage}
                       title="Upload to Analyze"
                       description="Drop an image here or click to select a file"
+                      initialImage={analyzeImage}
                     />
                   </div>
                 </div>
@@ -305,6 +447,15 @@ const App: React.FC = () => {
                  ) : generatedPrompt ? (
                    <div className="relative bg-slate-100 p-4 rounded-lg text-slate-700 h-full max-h-[75vh] flex flex-col">
                      <div className="absolute top-2 right-2 flex items-center gap-2 z-10">
+                        <Tooltip text="Use in Generator">
+                          <button
+                            onClick={handleUsePrompt}
+                            className="p-2 rounded-md bg-accent text-white hover:bg-emerald-600 transition"
+                            aria-label="Use this prompt and image in the Generate tab"
+                          >
+                            <UsePromptIcon />
+                          </button>
+                        </Tooltip>
                         <Tooltip text="Paste from clipboard">
                           <button onClick={handlePasteGeneratedPrompt} className="p-2 rounded-md bg-slate-200 hover:bg-slate-300 transition">
                             <PasteIcon/>
@@ -364,6 +515,7 @@ const App: React.FC = () => {
                       onImageUpload={setGenerateImageFile}
                       title="Upload for Generation"
                       description="Drop a photo to use its facial structure"
+                      initialImage={generateImageFile}
                     />
                 </div>
                 <div className="pt-4 space-y-2">
@@ -511,19 +663,34 @@ const App: React.FC = () => {
                   )}
                 </div>
                  {generatedResultImage && !isGenerating && !isImageLoading && (
-                  <button
-                    onClick={handleDownloadImage}
-                    className="w-full bg-secondary text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 transition duration-300 flex items-center justify-center gap-2 mt-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-                      <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                      <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-                    </svg>
-                    Download Image
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleDownloadImage}
+                      className="w-full bg-secondary text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 transition duration-300 flex items-center justify-center gap-2"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                      </svg>
+                      Download
+                    </button>
+                    <button
+                      onClick={handleSaveToGallery}
+                      className="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition duration-300 flex items-center justify-center gap-2"
+                    >
+                      <SaveIcon />
+                      Save to Gallery
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
+          )}
+          {activeTab === Tab.Gallery && user && (
+            <Gallery user={user} galleryKey={galleryKey} />
+          )}
+          {activeTab === Tab.History && user && (
+            <History user={user} historyKey={historyKey} />
           )}
         </main>
       </div>
