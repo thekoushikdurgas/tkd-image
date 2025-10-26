@@ -13,3 +13,21 @@ export interface HistoryItem {
   prompt: string;
   createdAt: Date;
 }
+
+export interface ImageFile {
+  base64: string;
+  mimeType: string;
+}
+
+export type Notification = {
+  message: string;
+  type: 'success' | 'error';
+};
+
+export interface StudioMessage {
+  id: number;
+  role: 'user' | 'model';
+  text: string;
+  media?: ImageFile;
+  grounding?: any[];
+}
