@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-} from 'firebase/auth';
-import { auth, googleProvider } from '../services/firebase';
+import { supabase } from '../services/supabaseClient';
 import Spinner from './Spinner';
 
 const Login: React.FC = () => {
@@ -13,49 +8,27 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  const getFirebaseErrorMessage = (error: any): string => {
-    switch (error.code) {
-      case 'auth/invalid-email':
-        return 'Please enter a valid email address.';
-      case 'auth/user-not-found':
-      case 'auth/wrong-password':
-      case 'auth/invalid-credential':
-      case 'auth/invalid-login-credentials':
-        return 'Invalid credentials. Please check your email and password.';
-      case 'auth/email-already-in-use':
-        return 'An account with this email already exists. Please try signing in instead.';
-      case 'auth/weak-password':
-        return 'Password should be at least 6 characters long.';
-      case 'auth/operation-not-allowed':
-        return 'This sign-in method is not enabled. Please contact support.';
-      case 'auth/user-disabled':
-        return 'This account has been disabled. Please contact support.';
-      case 'auth/too-many-requests':
-        return 'Access to this account has been temporarily disabled due to many failed login attempts. You can immediately restore it by resetting your password or you can try again later.';
-      case 'auth/network-request-failed':
-        return 'A network error occurred. Please check your internet connection and try again.';
-      case 'auth/popup-closed-by-user':
-        return 'The sign-in window was closed. Please try again.';
-      case 'auth/cancelled-popup-request':
-        return 'The sign-in flow was cancelled. Please try again.';
-      case 'auth/popup-blocked':
-        return 'The sign-in popup was blocked by your browser. Please enable popups for this site and try again.';
-      default:
-        return `An unexpected error occurred: ${error.message}. Please try again.`;
+  
+  const handleAuthResponse = (error: any) => {
+    if (error) {
+        setError(error.message);
+        console.error('Authentication error:', error.message || error);
+    } else {
+        setError(null);
+        // Successful sign-in/up is handled by onAuthStateChange in App.tsx
     }
+    setIsLoading(false);
   };
+
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     setError(null);
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
-      setError(getFirebaseErrorMessage(err));
-      console.error('Authentication error:', err.message || err);
-    } finally {
-      setIsLoading(false);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+    });
+    if (error) {
+        handleAuthResponse(error);
     }
   };
 
@@ -68,28 +41,23 @@ const Login: React.FC = () => {
     setIsLoading(true);
     setError(null);
 
-    try {
-      if (isLoginView) {
-        await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        await createUserWithEmailAndPassword(auth, email, password);
-      }
-    } catch (err: any) {
-      setError(getFirebaseErrorMessage(err));
-      console.error('Email/Password Auth Error:', err.message || err);
-    } finally {
-      setIsLoading(false);
+    if (isLoginView) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      handleAuthResponse(error);
+    } else {
+      const { error } = await supabase.auth.signUp({ email, password });
+      handleAuthResponse(error);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 font-sans">
       <div className="max-w-md w-full bg-card-bg p-8 rounded-xl shadow-lg">
         <div className="text-center mb-6">
           <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary mb-2">
             {isLoginView ? 'Welcome Back!' : 'Create Account'}
           </h1>
-          <p className="text-slate-600">
+          <p className="text-text-secondary">
             {isLoginView
               ? 'Sign in to continue to AI Image Stylizer.'
               : 'Get started with your new account.'}
@@ -100,7 +68,7 @@ const Login: React.FC = () => {
           <div>
             <label
               htmlFor="email"
-              className="block text-sm font-medium text-left text-slate-700"
+              className="block text-sm font-medium text-left text-text"
             >
               Email Address
             </label>
@@ -112,14 +80,14 @@ const Login: React.FC = () => {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+              className="mt-1 block w-full px-3 py-2 bg-background border border-border-color rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm text-text"
               placeholder="you@example.com"
             />
           </div>
           <div>
             <label
               htmlFor="password"
-              className="block text-sm font-medium text-left text-slate-700"
+              className="block text-sm font-medium text-left text-text"
             >
               Password
             </label>
@@ -131,18 +99,18 @@ const Login: React.FC = () => {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+              className="mt-1 block w-full px-3 py-2 bg-background border border-border-color rounded-md shadow-sm placeholder-gray-500 focus:outline-none focus:ring-primary focus:border-primary sm:text-sm text-text"
               placeholder="••••••••"
             />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-400">{error}</p>}
 
           <div>
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:bg-indigo-300 disabled:cursor-not-allowed"
+              className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary disabled:bg-indigo-400/50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <Spinner className="h-5 w-5" />
@@ -158,10 +126,10 @@ const Login: React.FC = () => {
         <div className="mt-6">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-300" />
+              <div className="w-full border-t border-border-color" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-card-bg text-slate-500">
+              <span className="px-2 bg-card-bg text-text-secondary">
                 Or continue with
               </span>
             </div>
@@ -170,7 +138,7 @@ const Login: React.FC = () => {
             <button
               onClick={handleGoogleSignIn}
               disabled={isLoading}
-              className="w-full inline-flex justify-center py-3 px-4 border border-slate-300 rounded-md shadow-sm bg-white text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:bg-slate-100 disabled:cursor-not-allowed"
+              className="w-full inline-flex justify-center py-3 px-4 border border-border-color rounded-md shadow-sm bg-background text-sm font-medium text-text hover:bg-border-color disabled:bg-border-color/50 disabled:cursor-not-allowed"
             >
               <svg
                 className="w-5 h-5 mr-3"
@@ -187,7 +155,7 @@ const Login: React.FC = () => {
           </div>
         </div>
 
-        <p className="mt-6 text-center text-sm text-slate-600">
+        <p className="mt-6 text-center text-sm text-text-secondary">
           {isLoginView
             ? "Don't have an account? "
             : 'Already have an account? '}
@@ -198,7 +166,7 @@ const Login: React.FC = () => {
               setEmail('');
               setPassword('');
             }}
-            className="font-medium text-primary hover:text-indigo-500"
+            className="font-medium text-primary hover:text-indigo-400"
           >
             {isLoginView ? 'Sign Up' : 'Sign In'}
           </button>

@@ -8,9 +8,9 @@ interface TabButtonProps {
 
 const TabButton: React.FC<TabButtonProps> = ({ isActive, onClick, children }) => {
   const baseClasses =
-    'flex items-center gap-3 px-4 py-3 font-semibold rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary';
+    'flex items-center gap-3 px-4 py-3 font-semibold rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary';
   const activeClasses = 'bg-primary text-white shadow-lg';
-  const inactiveClasses = 'bg-card-bg text-text-primary hover:bg-slate-100';
+  const inactiveClasses = 'bg-transparent text-text hover:bg-card-bg';
 
   return (
     <button

@@ -5,19 +5,37 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Image Stylizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
-            colors: {
-              primary: '#6366F1', // indigo
-              secondary: '#8B5CF6', // purple
-              background: '#F8FAFC', // light slate
-              'text-primary': '#1E293B', // slate
-              accent: '#10B981', // emerald
-              'card-bg': '#FFFFFF', // white
+            fontFamily: {
+              sans: ['Roboto', 'sans-serif'],
             },
+            colors: {
+              primary: '#6C5CE7',
+              secondary: '#74B9FF',
+              background: '#2D3436',
+              accent: '#00B894',
+              success: '#00E676',
+              text: '#DDDDDD',
+              'card-bg': '#3a4144',
+              'border-color': '#4a5154',
+              'text-secondary': '#a0a0a0'
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-in-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+            }
           },
         },
       }
@@ -29,16 +47,12 @@
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
-    "firebase/app": "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js",
-    "firebase/storage": "https://www.gstatic.com/firebasejs/9.22.0/firebase-storage.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.4.0/"
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm"
   }
 }
 </script>
 </head>
-  <body class="bg-background">
+  <body class="bg-background text-text">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

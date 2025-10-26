@@ -1,37 +1,28 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { fileToBase64 } from '../services/geminiService';
 
-interface ImageUploaderProps {
-  onImageUpload: (fileData: { base64: string; mimeType: string }) => void;
+interface MediaUploaderProps {
+  onMediaUpload: (fileData: { base64: string; mimeType: string }) => void;
   title: string;
   description: string;
-  initialImage?: { base64: string; mimeType: string } | null;
 }
 
-const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, title, description, initialImage }) => {
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+const MediaUploader: React.FC<MediaUploaderProps> = ({ onMediaUpload, title, description }) => {
+  const [preview, setPreview] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (initialImage) {
-      const dataUrl = `data:${initialImage.mimeType};base64,${initialImage.base64}`;
-      setImagePreview(dataUrl);
-    } else {
-      setImagePreview(null);
-    }
-  }, [initialImage]);
-
   const handleFileSelected = async (file: File | null) => {
-    if (file && file.type.startsWith('image/')) {
+    if (file && (file.type.startsWith('image/') || file.type.startsWith('video/'))) {
       try {
         const { base64, mimeType } = await fileToBase64(file);
         const dataUrl = `data:${mimeType};base64,${base64}`;
-        setImagePreview(dataUrl);
-        onImageUpload({ base64, mimeType });
+        setPreview(dataUrl);
+        setMediaType(file.type.startsWith('image/') ? 'image' : 'video');
+        onMediaUpload({ base64, mimeType });
       } catch (error: any) {
         console.error("Error processing file:", error.message || error);
-        // You could add user-facing error handling here
       }
     }
   };
@@ -67,6 +58,17 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, title, des
     fileInputRef.current?.click();
   };
 
+  const clearMedia = () => {
+    setPreview(null);
+    setMediaType(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    // You might want to notify the parent component that the media has been cleared
+    // onMediaUpload(null); 
+  };
+
+
   return (
     <>
       <div
@@ -77,19 +79,32 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, title, des
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        onClick={handleClick}
+        onClick={!preview ? handleClick : undefined}
       >
         <input
           type="file"
           ref={fileInputRef}
           className="hidden"
-          accept="image/*"
+          accept="image/*,video/*"
           onChange={(e) => handleFileSelected(e.target.files ? e.target.files[0] : null)}
-          // By setting value to '', we ensure the onChange event fires even if the same file is selected again.
           value=""
         />
-        {imagePreview ? (
-          <img src={imagePreview} alt="Preview" className="max-h-64 rounded-lg object-contain" />
+        {preview ? (
+            <div className="relative w-full h-full">
+                {mediaType === 'image' && (
+                    <img src={preview} alt="Preview" className="max-h-64 rounded-lg object-contain mx-auto" />
+                )}
+                {mediaType === 'video' && (
+                    <video src={preview} controls className="max-h-64 rounded-lg mx-auto" />
+                )}
+                 <button 
+                    onClick={clearMedia}
+                    className="absolute top-0 right-0 m-2 bg-red-600 text-white rounded-full p-1.5 hover:bg-red-700 transition-all z-10"
+                    aria-label="Remove media"
+                >
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
         ) : (
           <div className="space-y-2">
             <svg className="mx-auto h-12 w-12 text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
@@ -104,4 +119,4 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, title, des
   );
 };
 
-export default ImageUploader;
+export default MediaUploader;
